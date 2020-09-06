@@ -6,34 +6,38 @@ class RYLR:
         self.uart = uart
         self.w = asyncio.StreamWriter(uart, {})
         self.r = asyncio.StreamReader(uart)
-        self.response = b''
-        self.waiting = []
-        self._on_recv = kw.get('on_recv', None)
+        self._data = None
+        self._id = 0
+        self._rssi = 0
+        self._snr = 0
+        self._resp = None
+        self._waiting = []
         self._frequency = kw.get('frequency', 915.0)
         self._bandwidth = kw.get('bandwidth', 250000)
         self._spreading_factor = kw.get('spreading_factor', 10)
-        self._coding_rate = kw.get('coding_rate', 5)
+        self._coding_rate = kw.get('coding_rate', 8)
         self._preamble_length = kw.get('preamble_length', 4)
 
     async def init(self):
         await self.set_frequency(self._frequency)
         await self._set_parameters()
-        await self.set_address(0)
-        await self.set_network(0)
-        await self.set_aes_key('0' * 32)
 
     async def send(self, msg, addr=0):
         await self.w.awrite('AT+SEND=%i,%i,%s\r\n' % (addr, len(msg), msg))
 
-    def on_recv(self, fn):
-        self._on_recv = fn
+    async def recv(self):
+        while self._data is None:
+            await asyncio.sleep(0.1)
+        data = self._data
+        self._data = None
+        return data
 
     async def _cmd(self, x):
         await self.w.awrite(x + '\r\n')
         e = asyncio.Event()
-        self.waiting.append(e)
+        self._waiting.append(e)
         await e.wait()
-        return self.response
+        return self._resp
 
     async def loop(self):
         r = self.r
@@ -46,13 +50,23 @@ class RYLR:
                 continue
             x = x[:-2].decode()
             if x.startswith('+RCV='):
-                if self._on_recv:
-                    self._on_recv(x)
+                self._recv(x[5:])
                 continue
-            self.response = x
-            if self.waiting:
-                e = self.waiting.pop(0)
+            self._resp = x
+            if self._waiting:
+                e = self._waiting.pop(0)
                 e.set()
+
+    def _recv(self, x):
+        id, n, x = x.split(',', 2)
+        n = int(n)
+        data = x[:n]
+        x = x[n+1:]
+        rssi, snr = x.split(',')
+        self._id = int(id)
+        self._rssi = int(rssi)
+        self._snr = int(snr)
+        self._data = data
 
     async def set_baud_rate(self, x):
         return await self._cmd('AT+IPR=' + x)
