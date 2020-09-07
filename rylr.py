@@ -32,7 +32,7 @@ class RYLR:
         await self._set_parameters()
 
     async def send(self, msg, addr=0):
-        await self.w.awrite('AT+SEND=%i,%i,%s\r\n' % (addr, len(msg), msg))
+        await self._cmd('AT+SEND=%i,%i,%s' % (addr, len(msg), msg))
 
     async def recv_packet(self):
         while self._packet is None:
@@ -78,19 +78,19 @@ class RYLR:
         rssi, snr = x.split(',')
         self._packet = Packet(data, int(addr), int(rssi), int(snr))
 
-    async def set_baud_rate(self, x):
-        return await self._cmd('AT+IPR=' + x)
-
     async def get_baud_rate(self):
         x = await self._cmd('AT+IPR?')
         return int(x[5:])
 
-    async def set_frequency(self, x):
-        return await self._cmd('AT+BAND=' + str(round(x * 1000000)))
+    async def set_baud_rate(self, x):
+        return await self._cmd('AT+IPR=' + x)
 
     async def get_frequency(self):
         x = await self._cmd('AT+BAND?')
         return int(x[6:]) / 1000000.0
+
+    async def set_frequency(self, x):
+        return await self._cmd('AT+BAND=' + str(round(x * 1000000)))
 
     async def _set_parameters(self):
         sf = self._spreading_factor
@@ -104,23 +104,51 @@ class RYLR:
         pl = self._preamble_length
         return await self._cmd('AT+PARAMETER=%i,%i,%i,%i' % (sf, bw, cr, pl))
 
-    async def set_address(self, addr):
-        return await self._cmd('AT+ADDRESS=' + str(addr))
-
     async def get_address(self):
         x = await self._cmd('AT+ADDRESS?')
         return int(x[9:])
 
-    async def set_network(self, n):
-        return await self._cmd('AT+NETWORKID=' + str(n))
+    async def set_address(self, addr):
+        return await self._cmd('AT+ADDRESS=' + str(addr))
+
+    async def get_bandwidth(self):
+        return self._bandwidth
+
+    async def set_bandwidth(self, bw):
+        self._bandwidth = bw
+        return await self._set_parameters()
+
+    async def get_coding_rate(self):
+        return self._coding_rate
+
+    async def set_coding_rate(self, cr):
+        self._coding_rate = cr
+        return await self._set_parameters()
+
+    async def get_preamble_length(self):
+        return self._preamble_length
+
+    async def set_preamble_length(self, pl):
+        self._preamble_length = pl
+        return await self._set_parameters()
+
+    async def get_spreading_factor(self):
+        return self._spreading_factor
+
+    async def set_spreading_factor(self, sf):
+        self._spreading_factor = sf
+        return await self._set_parameters()
 
     async def get_network(self):
         x = await self._cmd('AT+NETWORKID?')
         return int(x[11:])
 
-    async def set_aes_key(self, key):
-        return await self._cmd('AT+CPIN=' + key)
+    async def set_network(self, n):
+        return await self._cmd('AT+NETWORKID=' + str(n))
 
     async def get_aes_key(self):
         x = await self._cmd('AT+CPIN?')
         return x[6:]
+
+    async def set_aes_key(self, key):
+        return await self._cmd('AT+CPIN=' + key)
