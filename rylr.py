@@ -1,15 +1,24 @@
 import uasyncio as asyncio
 
+class Packet:
+
+    def __init__(self, data, addr=0, rssi=0, snr=0):
+        self.data = data
+        self.addr = addr
+        self.rssi = rssi
+        self.snr = snr
+
+    def __str__(self):
+        return self.data
+
+
 class RYLR:
 
     def __init__(self, uart, **kw):
         self.uart = uart
         self.w = asyncio.StreamWriter(uart, {})
         self.r = asyncio.StreamReader(uart)
-        self._data = None
-        self._id = 0
-        self._rssi = 0
-        self._snr = 0
+        self._packet = None
         self._resp = None
         self._waiting = []
         self._frequency = kw.get('frequency', 915.0)
@@ -25,12 +34,16 @@ class RYLR:
     async def send(self, msg, addr=0):
         await self.w.awrite('AT+SEND=%i,%i,%s\r\n' % (addr, len(msg), msg))
 
-    async def recv(self):
-        while self._data is None:
+    async def recv_packet(self):
+        while self._packet is None:
             await asyncio.sleep(0.1)
-        data = self._data
-        self._data = None
+        data = self._packet
+        self._packet = None
         return data
+
+    async def recv(self):
+        pkt = await self.recv_packet()
+        return pkt.data
 
     async def _cmd(self, x):
         await self.w.awrite(x + '\r\n')
@@ -58,15 +71,12 @@ class RYLR:
                 e.set()
 
     def _recv(self, x):
-        id, n, x = x.split(',', 2)
+        addr, n, x = x.split(',', 2)
         n = int(n)
         data = x[:n]
         x = x[n+1:]
         rssi, snr = x.split(',')
-        self._id = int(id)
-        self._rssi = int(rssi)
-        self._snr = int(snr)
-        self._data = data
+        self._packet = Packet(data, int(addr), int(rssi), int(snr))
 
     async def set_baud_rate(self, x):
         return await self._cmd('AT+IPR=' + x)
